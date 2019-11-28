@@ -80,8 +80,9 @@ public interface UpgradeManager
             {
                 this.context.openFileInput(getFilename());
             }
-            catch (FileNotFoundException e)
+            catch (Exception e)
             {
+
                 return false;
             }
 
@@ -205,16 +206,36 @@ public interface UpgradeManager
         }
     }
 
-    class DownloadedUpgradeFile extends UpgradeFile
+    class OldDownloadedUpgradeFile extends UpgradeFile
     {
-        public DownloadedUpgradeFile(Context context)
+        public OldDownloadedUpgradeFile(Context context)
         {
             super(context);
         }
 
+        public String getFilename() { return "PsiphonAndroid.upgrade_package"; }
+
+        public boolean isWorldReadable()
+        {
+            return false;
+        }
+
+    }
+
+    class DownloadedUpgradeFile extends UpgradeFile
+    {
+
+        private String filename;
+
+        public DownloadedUpgradeFile(Context context, File file)
+        {
+            super(context);
+            filename = file.getName();
+        }
+
         public String getFilename()
         {
-            return "PsiphonAndroid.upgrade_package";
+            return filename;
         }
 
         public boolean isWorldReadable()
@@ -248,6 +269,8 @@ public interface UpgradeManager
                         unzipStream,
                         true, // "data" is Base64 (and is a large value to be streamed)
                         dataDestination);
+
+                MyLog.g(String.format("Extracted UpgradeDownloadFilename to %s", dataDestination));
 
                 return unverifiedFile.rename(new VerifiedUpgradeFile(super.context).getFilename());
             }
@@ -290,9 +313,9 @@ public interface UpgradeManager
          * Side-effect: May delete existing upgrade file if it's invalid or an old version.
          * @return true if upgrade file is available to be applied.
          */
-        protected static VerifiedUpgradeFile getAvailableCompleteUpgradeFile(Context context)
+        protected static VerifiedUpgradeFile getAvailableCompleteUpgradeFile(Context context, File downloadedUpgradeFile)
         {
-            DownloadedUpgradeFile downloadedFile = new DownloadedUpgradeFile(context);
+            DownloadedUpgradeFile downloadedFile = new DownloadedUpgradeFile(context, downloadedUpgradeFile);
 
             if (downloadedFile.exists())
             {
@@ -304,6 +327,8 @@ public interface UpgradeManager
                 // there may be corrupt bytes. So delete it and next time we'll start over.
                 // NOTE: this means if the failure was due to not enough free space
                 // to write the extracted file... we still re-download.
+
+                MyLog.g(String.format("Deleting UpgradeDownloadFilename: %s", downloadedFile.getFullPath()));
 
                 downloadedFile.delete();
 
@@ -368,8 +393,8 @@ public interface UpgradeManager
          * @param context
          * @return true if an upgrade file is available
          */
-        public static boolean upgradeFileAvailable(Context context) {
-            return getAvailableCompleteUpgradeFile(context) != null;
+        public static boolean upgradeFileAvailable(Context context, File file) {
+            return getAvailableCompleteUpgradeFile(context, file) != null;
         }
 
         /**
@@ -394,8 +419,8 @@ public interface UpgradeManager
          * @param context
          * @return true if an upgrade is available and the notification was shown
          */
-        public static boolean notifyUpgrade(Context context) {
-            VerifiedUpgradeFile file = getAvailableCompleteUpgradeFile(context);
+        public static boolean notifyUpgrade(Context context, String filename) {
+            VerifiedUpgradeFile file = getAvailableCompleteUpgradeFile(context, new File(filename));
             if (file == null) {
                 return false;
             }
