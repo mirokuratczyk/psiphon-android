@@ -71,7 +71,7 @@ public class UpgradeChecker extends WakefulBroadcastReceiver {
     private static final String CREATE_ALARM_INTENT_ACTION = UpgradeChecker.class.getName()+":CREATE_ALARM";
 
     public static final String UPGRADE_FILE_AVAILABLE_INTENT_ACTION = UpgradeChecker.class.getName()+":UPGRADE_AVAILABLE";
-    public static final String UPGRADE_FILE_AVAILABLE_INTENT_FILENAME = UpgradeChecker.class.getName()+":UPGRADE_FILENAME";
+    public static final String UPGRADE_FILE_AVAILABLE_INTENT_EXTRA_FILENAME = UpgradeChecker.class.getName()+":UPGRADE_FILENAME";
 
     /**
      * Provides loggging functionality to the :UpgradeChecker process. Utilizes LoggingProvider.
@@ -164,7 +164,7 @@ public class UpgradeChecker extends WakefulBroadcastReceiver {
             // We know there's an upgrade file available, so send an intent about it.
             Intent intent = new Intent(appContext, UpgradeChecker.class);
             intent.setAction(UPGRADE_FILE_AVAILABLE_INTENT_ACTION);
-            intent.putExtra(UPGRADE_FILE_AVAILABLE_INTENT_FILENAME, downloadedUpgradeFile.getName());
+            intent.putExtra(UPGRADE_FILE_AVAILABLE_INTENT_EXTRA_FILENAME, downloadedUpgradeFile.getName());
             appContext.sendBroadcast(intent);
             return false;
         }
@@ -222,8 +222,8 @@ public class UpgradeChecker extends WakefulBroadcastReceiver {
         else if (action.equals(UPGRADE_FILE_AVAILABLE_INTENT_ACTION)) {
             log(context, R.string.upgrade_checker_upgrade_file_available_intent_received, MyLog.Sensitivity.NOT_SENSITIVE, Log.WARN);
             // Create upgrade notification. User clicking the notification will trigger the install.
-            String filename = intent.getStringExtra(UPGRADE_FILE_AVAILABLE_INTENT_FILENAME);
-            MyLog.g(String.format("UPGRADE_FILE_AVAILABLE_INTENT_FILENAME: %s", filename));
+            String filename = intent.getStringExtra(UPGRADE_FILE_AVAILABLE_INTENT_EXTRA_FILENAME);
+            MyLog.g(String.format("UPGRADE_FILE_AVAILABLE_INTENT_EXTRA_FILENAME: %s", filename));
             UpgradeManager.UpgradeInstaller.notifyUpgrade(context.getApplicationContext(), filename);
         }
         else if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
@@ -430,7 +430,7 @@ public class UpgradeChecker extends WakefulBroadcastReceiver {
 
             Intent intent = new Intent(this, UpgradeChecker.class);
             intent.setAction(UPGRADE_FILE_AVAILABLE_INTENT_ACTION);
-            intent.putExtra(UPGRADE_FILE_AVAILABLE_INTENT_FILENAME, filename);
+            intent.putExtra(UPGRADE_FILE_AVAILABLE_INTENT_EXTRA_FILENAME, filename);
             this.sendBroadcast(intent);
 
             shutDownTunnel();

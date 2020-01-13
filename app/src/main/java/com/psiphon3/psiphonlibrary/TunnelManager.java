@@ -727,8 +727,7 @@ public class TunnelManager implements PsiphonTunnel.HostService, MyLog.ILogger {
         m_startedTunneling.set(false);
 
         // Notify if an upgrade has already been downloaded and is waiting for install
-        String upgradeDownloadFilePath =  "upgrade"; // TODO
-        UpgradeManager.UpgradeInstaller.notifyUpgrade(getContext(), upgradeDownloadFilePath); // TODO!
+        UpgradeManager.UpgradeInstaller.notifyUpgrade(getContext(), PsiphonTunnel.getDefaultUpgradeDownloadFilePath(getContext()));
 
         sendClientMessage(ServiceToClientMessage.TUNNEL_STARTING.ordinal(), null);
 
@@ -971,13 +970,9 @@ public class TunnelManager implements PsiphonTunnel.HostService, MyLog.ILogger {
                 json.put("MigrateRemoteServerListDownloadFilename", remoteServerListDownload.getAbsolutePath());
 
                 File oslDownloadDir = new File(tempTunnelDir, "osl");
-                if (!oslDownloadDir.exists()
-                        && !oslDownloadDir.mkdirs()) {
-                    // Failed to create osl directory
-                    // TODO: proceed anyway?
-                    return null;
+                if (oslDownloadDir.exists()) {
+                    json.put("MigrateObfuscatedServerListDownloadDirectory", oslDownloadDir.getAbsolutePath());
                 }
-                json.put("MigrateObfuscatedServerListDownloadDirectory", oslDownloadDir.getAbsolutePath());
 
                 // This number is an arbitrary guess at what might be the "best" balance between
                 // wake-lock-battery-burning and successful upgrade downloading.

@@ -38,6 +38,7 @@ import com.psiphon3.psiphonlibrary.Utils.MyLog;
 
 import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -222,30 +223,34 @@ public interface UpgradeManager
 
     }
 
-    class DownloadedUpgradeFile extends UpgradeFile
+    class DownloadedUpgradeFile
     {
-
-        private String filename;
+        private File file;
+        private Context context;
 
         public DownloadedUpgradeFile(Context context, File file)
         {
-            super(context);
-            filename = file.getName();
+            this.context = context;
+            this.file = file;
         }
 
-        public String getFilename()
-        {
-            return filename;
+        public String getFullPath() {
+            return this.file.getAbsolutePath();
         }
 
-        public boolean isWorldReadable()
+        public boolean exists()
         {
-            return false;
+            return this.file.exists();
+        }
+
+        public boolean delete()
+        {
+            return this.file.delete();
         }
 
         private InputStream openUnzipStream() throws IOException, FileNotFoundException
         {
-            return new GZIPInputStream(new BufferedInputStream(super.context.openFileInput(getFilename())));
+            return new GZIPInputStream(new BufferedInputStream(new FileInputStream(this.file)));
         }
 
         public boolean extractAndVerify()
@@ -261,7 +266,7 @@ public interface UpgradeManager
 
                 unzipStream = openUnzipStream();
 
-                UnverifiedUpgradeFile unverifiedFile = new UnverifiedUpgradeFile(super.context);
+                UnverifiedUpgradeFile unverifiedFile = new UnverifiedUpgradeFile(this.context);
                 OutputStream dataDestination = unverifiedFile.createForWriting();
 
                 AuthenticatedDataPackage.extractAndVerifyData(
@@ -272,7 +277,7 @@ public interface UpgradeManager
 
                 MyLog.g(String.format("Extracted UpgradeDownloadFilename to %s", dataDestination));
 
-                return unverifiedFile.rename(new VerifiedUpgradeFile(super.context).getFilename());
+                return unverifiedFile.rename(new VerifiedUpgradeFile(this.context).getFilename());
             }
             catch (FileNotFoundException e)
             {
@@ -319,7 +324,7 @@ public interface UpgradeManager
 
             if (downloadedFile.exists())
             {
-                boolean success  = downloadedFile.extractAndVerify();
+                boolean success = downloadedFile.extractAndVerify();
 
                 // If the extract and verify succeeds, delete it since it's no longer
                 // required and we don't want to re-install it.
