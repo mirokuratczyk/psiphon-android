@@ -392,12 +392,12 @@ public class UpgradeChecker extends WakefulBroadcastReceiver {
             tunnelManagerConfig.disableTimeouts = multiProcessPreferences.getBoolean(
                     this.getString(R.string.disableTimeoutsPreference), false);
 
+            TunnelManager.setPlatformAffixes(mTunnel, "Psiphon_UpgradeChecker_");
+
             String tunnelCoreConfig = TunnelManager.buildTunnelCoreConfig(
                     this,                       // context
-                    mTunnel,
                     tunnelManagerConfig,
-                    "upgradechecker",           // tempTunnelName
-                    "Psiphon_UpgradeChecker_"); // clientPlatformPrefix
+                    "upgradechecker");           // tempTunnelName
             return tunnelCoreConfig == null ? "" : tunnelCoreConfig;
         }
 

@@ -1090,39 +1090,17 @@ public class TunnelManager implements PsiphonTunnel.HostService, MyLog.ILogger {
      * @param context
      * @param tunnelConfig         Config values to be set in the tunnel core config.
      * @param tempTunnelName       null if not a temporary tunnel. If set, must be a valid to use in file path.
-     * @param clientPlatformPrefix null if not applicable (i.e., for main Psiphon app); should be provided
-     *                             for temp tunnels. Will be prepended to standard client platform value.
      * @return JSON string of config. null on error.
      */
     public static String buildTunnelCoreConfig(
             Context context,
-            PsiphonTunnel tunnel,
             Config tunnelConfig,
-            String tempTunnelName,
-            String clientPlatformPrefix) {
+            String tempTunnelName) {
         boolean temporaryTunnel = tempTunnelName != null && !tempTunnelName.isEmpty();
 
         JSONObject json = new JSONObject();
 
         try {
-            String prefix = "";
-            if (clientPlatformPrefix != null && !clientPlatformPrefix.isEmpty()) {
-                prefix = clientPlatformPrefix;
-            }
-
-            String suffix = "";
-
-            // Detect if device is rooted and append to the client_platform string
-            if (Utils.isRooted()) {
-                suffix += PsiphonConstants.ROOTED;
-            }
-
-            // Detect if this is a Play Store build
-            if (EmbeddedValues.IS_PLAY_STORE_BUILD) {
-                suffix += PsiphonConstants.PLAY_STORE_BUILD;
-            }
-
-            tunnel.setClientPlatformAffixes(prefix, suffix);
 
             json.put("ClientVersion", EmbeddedValues.CLIENT_VERSION);
 
@@ -1218,9 +1196,39 @@ public class TunnelManager implements PsiphonTunnel.HostService, MyLog.ILogger {
                 .distinctUntilChanged();
     }
 
+    /**
+     * Configure tunnel with appropriate client platform affixes (i.e., the main Psiphon app
+     * tunnel and the UpgradeChecker temp tunnel).
+     *
+     * @param tunnel
+     * @param clientPlatformPrefix null if not applicable (i.e., for main Psiphon app); should be provided
+     *                             for temp tunnels. Will be prepended to standard client platform value.
+     */
+    static public void setPlatformAffixes(PsiphonTunnel tunnel, String clientPlatformPrefix) {
+        String prefix = "";
+        if (clientPlatformPrefix != null && !clientPlatformPrefix.isEmpty()) {
+            prefix = clientPlatformPrefix;
+        }
+
+        String suffix = "";
+
+        // Detect if device is rooted and append to the client_platform string
+        if (Utils.isRooted()) {
+            suffix += PsiphonConstants.ROOTED;
+        }
+
+        // Detect if this is a Play Store build
+        if (EmbeddedValues.IS_PLAY_STORE_BUILD) {
+            suffix += PsiphonConstants.PLAY_STORE_BUILD;
+        }
+
+        tunnel.setClientPlatformAffixes(prefix, suffix);
+    }
+
     @Override
     public String getPsiphonConfig() {
-        String config = buildTunnelCoreConfig(getContext(), m_tunnel, m_tunnelConfig, null, null);
+        this.setPlatformAffixes(m_tunnel, null);
+        String config = buildTunnelCoreConfig(getContext(), m_tunnelConfig, null);
         return config == null ? "" : config;
     }
 

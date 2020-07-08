@@ -19,14 +19,8 @@
 
 package com.psiphon3.psiphonlibrary;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URL;
-import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Locale;
-
-import javax.net.ssl.HttpsURLConnection;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -36,9 +30,13 @@ import android.content.Context;
 import android.os.Build;
 import android.util.Log;
 
+import ca.psiphon.PsiphonTunnel;
+
 import com.psiphon3.psiphonlibrary.Utils.MyLog;
 
 import com.psiphon3.R;
+
+import net.grandcentrix.tray.AppPreferences;
 
 public class Diagnostics
 {
@@ -220,37 +218,7 @@ public class Diagnostics
 
         assert(diagnosticJSON != null);
 
-        // Encrypt the file contents
-        Utils.RSAEncryptOutput rsaEncryptOutput = null;
-        boolean encryptedOkay = false;
-        try
-        {
-            rsaEncryptOutput = Utils.encryptWithRSA(
-                    diagnosticJSON.getBytes("UTF-8"),
-                    EmbeddedValues.FEEDBACK_ENCRYPTION_PUBLIC_KEY);
-            encryptedOkay = true;
-        }
-        catch (GeneralSecurityException | UnsupportedEncodingException e)
-        {
-            MyLog.e(R.string.Diagnostics_EncryptedFailed, MyLog.Sensitivity.NOT_SENSITIVE, e);
-        }
-
-        String result = null;
-        if (encryptedOkay)
-        {
-            StringBuilder encryptedContent = new StringBuilder();
-            encryptedContent.append("{\n");
-            encryptedContent.append("  \"contentCiphertext\": \"").append(Utils.Base64.encode(rsaEncryptOutput.mContentCiphertext)).append("\",\n");
-            encryptedContent.append("  \"iv\": \"").append(Utils.Base64.encode(rsaEncryptOutput.mIv)).append("\",\n");
-            encryptedContent.append("  \"wrappedEncryptionKey\": \"").append(Utils.Base64.encode(rsaEncryptOutput.mWrappedEncryptionKey)).append("\",\n");
-            encryptedContent.append("  \"contentMac\": \"").append(Utils.Base64.encode(rsaEncryptOutput.mContentMac)).append("\",\n");
-            encryptedContent.append("  \"wrappedMacKey\": \"").append(Utils.Base64.encode(rsaEncryptOutput.mWrappedMacKey)).append("\"\n");
-            encryptedContent.append("}");
-
-            result = encryptedContent.toString();
-        }
-
-        return result;
+        return diagnosticJSON;
     }
 
     /**
@@ -307,38 +275,32 @@ public class Diagnostics
                     return;
                 }
 
-                byte[] diagnosticDataBytes;
-                try
-                {
-                    diagnosticDataBytes = diagnosticData.getBytes("UTF-8");
-                    diagnosticData = null;
-                }
-                catch (UnsupportedEncodingException e)
-                {
-                    MyLog.d("diagnosticData.getBytes failed", e);
-                    // unrecoverable
+                // Build a temporary tunnel config to use
+                TunnelManager.Config tunnelManagerConfig = new TunnelManager.Config();
+                final AppPreferences multiProcessPreferences = new AppPreferences(context);
+                tunnelManagerConfig.disableTimeouts = multiProcessPreferences.getBoolean(
+                        context.getString(R.string.disableTimeoutsPreference), false);
+
+                String tunnelCoreConfig = TunnelManager.buildTunnelCoreConfig(
+                        context,
+                        tunnelManagerConfig,
+                        "feedbackupload");
+
+                if (tunnelCoreConfig == null) {
+                    MyLog.g("Diagnostics tunnelCoreConfig null");
                     return;
                 }
 
-                // Retry uploading data up to 5 times
-                for (int i = 0; i < 5; i++)
-                {
-                    if (doFeedbackUpload(diagnosticDataBytes))
-                    {
-                        break;
-                    }
-
-                    // The upload request failed, so sleep and try again.
-                    try
-                    {
-                        MyLog.g("Diagnostic data send fail; sleeping");
-                        Thread.sleep(5 * 60 * 1000);
-                    }
-                    catch (InterruptedException e)
-                    {
-                        // Bail out of this thread if sleep is interrupted.
-                        return;
-                    }
+                try {
+                    PsiphonTunnel.sendFeedback(
+                            tunnelCoreConfig,
+                            diagnosticData,
+                            EmbeddedValues.FEEDBACK_ENCRYPTION_PUBLIC_KEY,
+                            EmbeddedValues.FEEDBACK_DIAGNOSTIC_INFO_UPLOAD_SERVER,
+                            EmbeddedValues.FEEDBACK_DIAGNOSTIC_INFO_UPLOAD_PATH,
+                            EmbeddedValues.FEEDBACK_DIAGNOSTIC_INFO_UPLOAD_SERVER_HEADERS);
+                } catch (java.lang.Exception e) {
+                    MyLog.g(String.format("Diagnostics sendFeedback failed: %s", e.getMessage()));
                 }
             }
         }
@@ -351,77 +313,5 @@ public class Diagnostics
                                             surveyResponsesJson);
         thread.start();
     }
-    
-    public final static int FEEDBACK_UPLOAD_TIMEOUT_MS = 30000;
-    
-    static private boolean doFeedbackUpload(byte[] feedbackData)
-    {
-        // NOTE: Won't succeed while VpnService routing is enabled but tunnel
-        // is not connected.
-        // TODO: In that situation, use the tunnel-core UrlProxy/direct mode.
 
-        SecureRandom rnd = new SecureRandom();
-        byte[] uploadId = new byte[8];
-        rnd.nextBytes(uploadId);
-
-        StringBuilder url = new StringBuilder();
-        url.append("https://");
-        url.append(EmbeddedValues.FEEDBACK_DIAGNOSTIC_INFO_UPLOAD_SERVER);
-        url.append(EmbeddedValues.FEEDBACK_DIAGNOSTIC_INFO_UPLOAD_PATH);
-        url.append(Utils.byteArrayToHexString(uploadId));
-
-        HttpsURLConnection httpsConn = null;
-        boolean success = false;
-        try
-        {
-            httpsConn = (HttpsURLConnection) new URL(url.toString()).openConnection();
-
-            // URLConnection timeouts are insufficient may be unreliable, so run a timeout
-            // thread to ensure HTTPS connection is terminated after 30 seconds if it
-            // has not already completed.
-            // E.g., http://stackoverflow.com/questions/11329277/why-timeout-value-is-not-respected-by-android-httpurlconnection
-            final HttpsURLConnection finalHttpsConn = httpsConn;
-            new Thread(new Runnable()
-            {
-                public void run()
-                {
-                    try
-                    {
-                        Thread.sleep(FEEDBACK_UPLOAD_TIMEOUT_MS);
-                    }
-                    catch (InterruptedException e)
-                    {
-                    }
-                    finalHttpsConn.disconnect();
-                }
-            }).start();
-            
-            httpsConn.setDoOutput(true);
-            httpsConn.setRequestMethod("PUT");
-            // Note: assumes this is only a single header
-            String[] headerPieces = EmbeddedValues.FEEDBACK_DIAGNOSTIC_INFO_UPLOAD_SERVER_HEADERS.split(": ");
-            httpsConn.setRequestProperty(headerPieces[0], headerPieces[1]);
-            httpsConn.setFixedLengthStreamingMode(feedbackData.length);
-
-            httpsConn.connect();
-            httpsConn.getOutputStream().write(feedbackData);
-            
-            // getInputStream() checks response status code
-            httpsConn.getInputStream();
-            
-            success = true;
-        } catch (IOException e)
-        {
-            MyLog.g(String.format("Diagnostic doFeedbackUpload failed: %s", e.getMessage()));
-        }
-        finally
-        {
-            if (httpsConn != null)
-            {
-                httpsConn.disconnect();
-            }
-        }
-
-        return success;
-    }
 }
