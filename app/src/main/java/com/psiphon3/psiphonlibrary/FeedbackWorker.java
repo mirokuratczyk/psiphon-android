@@ -3,6 +3,7 @@ package com.psiphon3.psiphonlibrary;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
+import androidx.work.Data;
 import androidx.work.RxWorker;
 import androidx.work.WorkerParameters;
 
@@ -24,6 +25,8 @@ import net.grandcentrix.tray.AppPreferences;
 /**
  * Feedback worker which securely uploads user submitted feedback to Psiphon Inc.
  *
+ * FeedbackWorker.generateInputData(..) should be used to generate the input data for any work requests.
+ *
  * Note: if an exception is thrown, then the work request will be marked as failed and will not be
  * rescheduled.
  */
@@ -38,6 +41,32 @@ public class FeedbackWorker extends RxWorker {
     private final long feedbackSubmitTimeMillis;
 
     private Thread shutdownHook;
+
+    /**
+     * Create the input data for a feedback upload work request.
+     *
+     * @param sendDiagnosticInfo If true, the user has opted in to including diagnostics with their
+     *                           feedback and diagnostics will be included in uploaded feedback.
+     *                           Otherwise, diagnostics will be omitted.
+     * @param email User email address.
+     * @param feedbackText User feedback comment.
+     * @param surveyResponsesJson User feedback responses.
+
+     * @return Input data for a work request to FeedbackWorker.
+     */
+    public static @NonNull Data generateInputData(boolean sendDiagnosticInfo,
+                                                  @NonNull String email,
+                                                  @NonNull String feedbackText,
+                                                  @NonNull String surveyResponsesJson) {
+        Data.Builder dataBuilder = new Data.Builder();
+        dataBuilder.putBoolean("sendDiagnosticInfo", sendDiagnosticInfo);
+        dataBuilder.putString("email", email);
+        dataBuilder.putString("feedbackText", feedbackText);
+        dataBuilder.putString("surveyResponsesJson", surveyResponsesJson);
+        dataBuilder.putLong("submitTimeMillis", new Date().getTime());
+        dataBuilder.putString("feedbackId", Diagnostics.generateFeedbackId());
+        return dataBuilder.build();
+    }
 
     /**
      * @param appContext   The application {@link Context}
@@ -65,11 +94,13 @@ public class FeedbackWorker extends RxWorker {
         }
         feedbackSubmitTimeMillis = workerParams.getInputData().getLong("submitTimeMillis", new Date().getTime());
 
-        // Generate feedback ID once per user feedback.
         // Using the same feedback ID for each upload attempt makes it easier to identify when a
         // feedback has been uploaded more than once, e.g. the upload succeeds but the connection
         // with the server is disrupted before the response is received by the client.
-        feedbackId = Diagnostics.generateFeedbackId();
+        feedbackId = workerParams.getInputData().getString("feedbackId");
+        if (feedbackId == null) {
+            throw new AssertionError("feedback ID null");
+        }
     }
 
     @Override
