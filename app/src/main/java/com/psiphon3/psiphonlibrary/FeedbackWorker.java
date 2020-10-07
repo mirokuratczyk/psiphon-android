@@ -34,6 +34,7 @@ public class FeedbackWorker extends RxWorker {
     private final String email;
     private final String feedbackText;
     private final String surveyResponsesJson;
+    private final String feedbackId;
     private final long feedbackSubmitTimeMillis;
 
     private Thread shutdownHook;
@@ -63,6 +64,12 @@ public class FeedbackWorker extends RxWorker {
             throw new AssertionError("survey response null");
         }
         feedbackSubmitTimeMillis = workerParams.getInputData().getLong("submitTimeMillis", new Date().getTime());
+
+        // Generate feedback ID once per user feedback.
+        // Using the same feedback ID for each upload attempt makes it easier to identify when a
+        // feedback has been uploaded more than once, e.g. the upload succeeds but the connection
+        // with the server is disrupted before the response is received by the client.
+        feedbackId = Diagnostics.generateFeedbackId();
     }
 
     @Override
@@ -213,6 +220,7 @@ public class FeedbackWorker extends RxWorker {
                                 email,
                                 feedbackText,
                                 surveyResponsesJson,
+                                feedbackId,
                                 // Only include diagnostics logged before the feedback was submitted
                                 new Date(feedbackSubmitTimeMillis));
 
@@ -231,6 +239,13 @@ public class FeedbackWorker extends RxWorker {
                             return Flowable.error(new Exception("tunnel-core config null"));
                         }
 
+                        // Note: It is possible that the upload could succeed at the same moment one
+                        // of the trigger signals (VPN state change, etc.) changes. Then there would
+                        // be a race between this signal emitting a value and it being disposed of,
+                        // which would result in the value being ignored. If this happens, the
+                        // feedback upload will be attempted again even though it already succeeded.
+                        // The same feedback ID is used for all upload attempts, which provides
+                        // visibility into these occurrences and allows for mitigation.
                         return startSendFeedback(context, tunnelCoreConfig, diagnosticData,
                                 "", "", Utils.getClientPlatformSuffix())
                                 .andThen(Flowable.just(Result.success()));
